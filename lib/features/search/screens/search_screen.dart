@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../payment/screens/paywall_screen.dart';
 import '../../../core/theme/app_theme.dart';
 import '../models/fsca_models.dart';
 import '../providers/search_provider.dart';
 import '../../payment/providers/credit_provider.dart';
-import '../../payment/screens/paywall_screen.dart';
 import '../../../core/services/supabase_service.dart';
 import 'claim_assistant_screen.dart';
 
@@ -67,9 +67,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
       ),
       body: searchState.when(
         data: (searchData) {
-          if (searchData.results.isNotEmpty) {
+          if (searchData.results.isNotEmpty && searchData.enquirer != null && searchData.target != null) {
             return _buildResultsList(searchData.results, searchData.enquirer!, searchData.target!);
           }
+
           return _buildStepper();
         },
         loading: () => Center(
@@ -374,15 +375,27 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
   }
 
   void _submitSearch() {
+    final creditState = ref.read(creditProvider);
     final creditNotifier = ref.read(creditProvider.notifier);
     
-    if (ref.read(creditProvider).credits <= 0) {
+    // Free users are only allowed to check NSFAS and RAF.
+    // FSCA Search (this screen) requires a paid membership.
+    if (creditState.tier == MembershipTier.free) {
       showDialog(
         context: context,
-        builder: (context) => const PaywallScreen(),
+        builder: (context) => PaywallScreen(),
       );
       return;
     }
+
+    if (creditState.credits <= 0) {
+      showDialog(
+        context: context,
+        builder: (context) => PaywallScreen(),
+      );
+      return;
+    }
+
 
     final enquirer = EnquirerDetails(
       names: _nameController.text,

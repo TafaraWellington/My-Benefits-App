@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
+import '../../payment/screens/paywall_screen.dart';
 import '../../../core/theme/app_theme.dart';
 import '../providers/document_provider.dart';
 import '../../../core/services/biometric_service.dart';
@@ -275,11 +276,50 @@ class _DocumentVaultScreenState extends ConsumerState<DocumentVaultScreen> {
   }
 
   Future<void> _pickFile(BuildContext context, WidgetRef ref) async {
+    final creditState = ref.read(creditProvider);
+    
+    // Free users cannot use the Document Vault (Cloud Sync)
+    if (creditState.tier == MembershipTier.free) {
+      showDialog(
+        context: context,
+        builder: (context) => PaywallScreen(),
+      );
+      return;
+    }
+
     FilePickerResult? result = await FilePicker.platform.pickFiles();
 
     if (result != null) {
       final file = result.files.first;
+      final fileSizeInBytes = file.size;
       
+      // Calculate current total size
+      int currentTotalSize = 0;
+      for (final doc in ref.read(documentProvider)) {
+        try {
+          final f = File(doc.path);
+          if (await f.exists()) {
+            currentTotalSize += await f.length();
+          }
+        } catch (_) {}
+      }
+
+      // Define limits
+      final int limitInMb = creditState.tier == MembershipTier.platinum ? 250 : 100;
+      final int limitInBytes = limitInMb * 1024 * 1024;
+
+      if (currentTotalSize + fileSizeInBytes > limitInBytes) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Vault limit reached ($limitInMb MB). Please upgrade or delete old documents.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
       if (!mounted) return;
       
       final category = await _showCategoryPicker(context);
@@ -287,25 +327,18 @@ class _DocumentVaultScreenState extends ConsumerState<DocumentVaultScreen> {
         // 1. Add locally first
         await ref.read(documentProvider.notifier).addDocument(file.name, file.path ?? '', category: category);
         
-        // 2. Trigger cloud sync in background if premium
-        final isPremium = ref.read(creditProvider).isPremium;
-        if (isPremium) {
-          _triggerCloudSync(ref, file.path ?? '', file.name);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('${file.name} saved and syncing to Cloud')),
-            );
-          }
-        } else {
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('${file.name} saved locally (Upgrade for Cloud Backup)')),
-            );
-          }
+        // 2. Trigger cloud sync in background
+        _triggerCloudSync(ref, file.path ?? '', file.name);
+        
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('${file.name} saved and syncing to Cloud (${(fileSizeInBytes / 1024 / 1024).toStringAsFixed(2)} MB)')),
+          );
         }
       }
     }
   }
+
 
   Future<void> _triggerCloudSync(WidgetRef ref, String path, String name) async {
     final supabase = ref.read(supabaseServiceProvider);

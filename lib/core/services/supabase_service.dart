@@ -9,8 +9,9 @@ final supabaseServiceProvider = Provider<SupabaseService>((ref) {
 
 class SupabaseService {
   // Replace with your actual Supabase URL and Anon Key
-  static const String _url = 'https://jnojcjchvziplbvykylb.supabase.co';
-  static const String _anonKey = 'sb_publishable_J2yRZltBBkD2OfuxYV44Mg_ZuhYDomy';
+  static const String _url = 'https://riztkhcqroedxmgloakl.supabase.co';
+  static const String _anonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJpenRraGNxcm9lZHhtZ2xvYWtsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODEwODk0MDUsImV4cCI6MjA5NjY2NTQwNX0.SPGWYOqFyZrToYHO_xXzFRTd75iPMnbcJKjbA1G1lhw';
+
 
   static Future<void> init() async {
     await Supabase.initialize(
@@ -52,6 +53,18 @@ class SupabaseService {
       return publicUrl;
     } catch (e) {
       debugPrint('Supabase Upload Error: $e');
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> getProfile() async {
+    try {
+      final userId = currentUser?.id;
+      if (userId == null) return null;
+      final response = await _supabase.from('profiles').select().eq('id', userId).maybeSingle();
+      return response;
+    } catch (e) {
+      debugPrint('Supabase Get Profile Error: $e');
       return null;
     }
   }

@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../payment/screens/paywall_screen.dart';
 import '../../../core/theme/app_theme.dart';
 import '../models/fsca_models.dart';
 import '../services/claim_assistant_service.dart';
 import '../services/pdf_service.dart';
 import 'pdf_preview_screen.dart';
 import '../../payment/providers/credit_provider.dart';
-import '../../payment/screens/paywall_screen.dart';
 
 class ClaimAssistantScreen extends ConsumerWidget {
   final BenefitResult result;
@@ -125,7 +125,7 @@ class ClaimAssistantScreen extends ConsumerWidget {
                   onPressed: () {
                     showDialog(
                       context: context,
-                      builder: (context) => const PaywallScreen(),
+                      builder: (context) => PaywallScreen(),
                     );
                   },
                 ),

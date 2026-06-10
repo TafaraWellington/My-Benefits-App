@@ -4,7 +4,10 @@ import 'package:go_router/go_router.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../shared/widgets/watermark_wrapper.dart';
 import '../../payment/providers/credit_provider.dart';
+import '../../payment/screens/paywall_screen.dart';
+import '../../documents/providers/document_provider.dart';
 import '../../../core/services/supabase_service.dart';
+
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -58,7 +61,9 @@ class HomeScreen extends ConsumerWidget {
   Widget _buildProfileHeader(BuildContext context, WidgetRef ref) {
     final supabase = ref.watch(supabaseServiceProvider);
     final user = supabase.currentUser;
-    final isPremium = ref.watch(creditProvider).isPremium;
+    final creditState = ref.watch(creditProvider);
+    final isPremium = creditState.isPremium;
+    final tier = creditState.tier;
 
     if (user == null) {
       return TextButton.icon(
@@ -68,7 +73,23 @@ class HomeScreen extends ConsumerWidget {
       );
     }
 
-    final initials = user.email?.substring(0, 2).toUpperCase() ?? 'U';
+    final initials = (user.email != null && user.email!.isNotEmpty) 
+        ? user.email![0].toUpperCase() 
+        : 'U';
+
+    Color tierColor = Colors.grey;
+    String tierName = 'Free';
+    String statusName = 'Standard';
+
+    if (tier == MembershipTier.gold) {
+      tierColor = AppColors.accent;
+      tierName = 'Gold';
+      statusName = 'Premium';
+    } else if (tier == MembershipTier.platinum) {
+      tierColor = Colors.purpleAccent;
+      tierName = 'Platinum';
+      statusName = 'Elite';
+    }
 
     return InkWell(
       onTap: () => context.push('/security'),
@@ -93,28 +114,60 @@ class HomeScreen extends ConsumerWidget {
             children: [
               Row(
                 children: [
-                  Container(width: 6, height: 6, decoration: BoxDecoration(color: isPremium ? AppColors.accent : Colors.grey, shape: BoxShape.circle)),
+                  Container(width: 6, height: 6, decoration: BoxDecoration(color: tierColor, shape: BoxShape.circle)),
                   const SizedBox(width: 4),
-                  Text(isPremium ? 'Gold' : 'Free', style: TextStyle(color: isPremium ? AppColors.accent : Colors.grey, fontSize: 12, fontWeight: FontWeight.bold)),
+                  Text(tierName, style: TextStyle(color: tierColor, fontSize: 12, fontWeight: FontWeight.bold)),
                 ],
               ),
-              Text(isPremium ? 'Premium' : 'Standard', style: const TextStyle(color: Colors.grey, fontSize: 10)),
+              Text(statusName, style: const TextStyle(color: Colors.grey, fontSize: 10)),
             ],
           ),
+          if (tier != MembershipTier.platinum) ...[
+            const SizedBox(width: 12),
+            ElevatedButton(
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (context) => PaywallScreen(),
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: tierColor.withOpacity(0.2),
+                foregroundColor: tierColor,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                minimumSize: const Size(0, 30),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              ),
+              child: const Text('Upgrade', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+            ),
+          ],
         ],
       ),
     );
+
   }
 }
 
-class _HomeContent extends StatelessWidget {
+class _HomeContent extends ConsumerWidget {
   const _HomeContent();
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final creditState = ref.watch(creditProvider);
+    final vaultSizeAsync = ref.watch(vaultSizeProvider);
+    
+    final int limitInMb = creditState.tier == MembershipTier.platinum 
+        ? 250 
+        : (creditState.tier == MembershipTier.gold ? 100 : 0);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // ... (Search Bar and Featured Services stay the same, but I'll skip to the Vault section for brevity if possible, 
+        // but I must provide the full ReplacementContent as per instructions if I'm replacing the whole block)
+        // Actually, I'll replace the whole build method.
+        
         // Search Bar
         Container(
           decoration: BoxDecoration(
@@ -151,6 +204,12 @@ class _HomeContent extends StatelessWidget {
             ],
           ),
         ),
+        const SizedBox(height: 24),
+
+        // Upgrade Banner
+        if (creditState.tier != MembershipTier.platinum)
+          _buildUpgradeBanner(context, creditState.tier),
+
         const SizedBox(height: 32),
 
         // Featured Services
@@ -182,28 +241,23 @@ class _HomeContent extends StatelessWidget {
           style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold),
         ),
         const SizedBox(height: 16),
-        Consumer(
-          builder: (context, ref, child) {
-            final supabase = ref.watch(supabaseServiceProvider);
-            return FutureBuilder<List<Map<String, dynamic>>>(
-              future: supabase.getSearchHistory(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final searches = snapshot.data ?? [];
-                if (searches.isEmpty) {
-                  return const Text('No recent searches found.', style: TextStyle(color: Colors.grey));
-                }
-                return Column(
-                  children: searches.map((s) => Column(
-                    children: [
-                      _buildSearchCard(s['query'] ?? 'Unknown Search', s['status'] ?? 'Pending', s['created_at']?.split('T')[0] ?? 'Recent'),
-                      const SizedBox(height: 12),
-                    ],
-                  )).toList(),
-                );
-              },
+        FutureBuilder<List<Map<String, dynamic>>>(
+          future: ref.watch(supabaseServiceProvider).getSearchHistory(),
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            final searches = snapshot.data ?? [];
+            if (searches.isEmpty) {
+              return const Text('No recent searches found.', style: TextStyle(color: Colors.grey));
+            }
+            return Column(
+              children: searches.map((s) => Column(
+                children: [
+                  _buildSearchCard(s['query'] ?? 'Unknown Search', s['status'] ?? 'Pending', s['created_at']?.split('T')[0] ?? 'Recent'),
+                  const SizedBox(height: 12),
+                ],
+              )).toList(),
             );
           },
         ),
@@ -268,9 +322,16 @@ class _HomeContent extends StatelessWidget {
                     color: Colors.grey.shade800,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Text(
-                    '25 GB Used | 100 GB Total',
-                    style: TextStyle(color: Colors.grey, fontSize: 10),
+                  child: vaultSizeAsync.when(
+                    data: (sizeInBytes) {
+                      final double sizeInMb = sizeInBytes / (1024 * 1024);
+                      return Text(
+                        '${sizeInMb.toStringAsFixed(2)} MB Used | $limitInMb MB Total',
+                        style: const TextStyle(color: Colors.grey, fontSize: 10),
+                      );
+                    },
+                    loading: () => const Text('Calculating...', style: TextStyle(color: Colors.grey, fontSize: 10)),
+                    error: (_, __) => Text('0 MB Used | $limitInMb MB Total', style: const TextStyle(color: Colors.grey, fontSize: 10)),
                   ),
                 ),
               ),
@@ -281,6 +342,7 @@ class _HomeContent extends StatelessWidget {
       ],
     );
   }
+
 
   Widget _buildServiceCard(BuildContext context, String title, IconData icon, VoidCallback onTap) {
     return InkWell(
@@ -362,6 +424,66 @@ class _HomeContent extends StatelessWidget {
         const SizedBox(height: 6),
         Text(label, style: const TextStyle(color: Colors.white, fontSize: 10)),
       ],
+    );
+  }
+
+  Widget _buildUpgradeBanner(BuildContext context, MembershipTier currentTier) {
+    final bool isGold = currentTier == MembershipTier.gold;
+    final String title = isGold ? 'Unlock Platinum Benefits' : 'Upgrade to Gold Membership';
+    final String subtitle = isGold ? 'Get 250MB Vault + 5000 Credits' : 'Get 100MB Vault + 1000 Credits';
+    final Color color = isGold ? Colors.purpleAccent : AppColors.accent;
+
+    return InkWell(
+      onTap: () {
+        showDialog(
+          context: context,
+          builder: (context) => PaywallScreen(),
+        );
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [color.withOpacity(0.8), color.withOpacity(0.4)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(color: color.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8)),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.stars, color: Colors.white, size: 28),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    subtitle,
+                    style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
+          ],
+        ),
+      ),
     );
   }
 }

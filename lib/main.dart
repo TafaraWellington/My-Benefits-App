@@ -63,7 +63,11 @@ final _router = GoRouter(
     final loggedIn = supabase.auth.currentSession != null;
     final loggingIn = state.uri.path == '/login';
 
-    if (!loggedIn && !loggingIn) return '/login';
+    // Protected routes that require authentication
+    final protectedRoutes = ['/documents', '/security', '/profile'];
+    final isAccessingProtected = protectedRoutes.contains(state.uri.path);
+
+    if (!loggedIn && isAccessingProtected) return '/login';
     if (loggedIn && loggingIn) return '/';
     return null;
   },

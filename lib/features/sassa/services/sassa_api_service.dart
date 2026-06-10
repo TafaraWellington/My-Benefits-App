@@ -50,4 +50,59 @@ class SassaApiService {
       throw Exception(e.toString());
     }
   }
+
+  Future<void> sendOtp({
+    required String idNumber,
+    required String phoneNumber,
+  }) async {
+    try {
+      await Future.delayed(const Duration(seconds: 1, milliseconds: 500));
+
+      if (idNumber.length != 13 || idNumber == '0000000000000') {
+        throw Exception('Invalid South African ID Number.');
+      }
+      
+      if (phoneNumber.isEmpty) {
+        throw Exception('Cellphone number cannot be empty.');
+      }
+      
+      // Simulates sending OTP successfully
+      return;
+    } catch (e) {
+      throw Exception(e.toString().replaceAll('Exception: ', ''));
+    }
+  }
+
+  Future<Map<String, dynamic>> verifyOtpAndCheckStatus({
+    required String idNumber,
+    required String phoneNumber,
+    required String otp,
+  }) async {
+    try {
+      await Future.delayed(const Duration(seconds: 1, milliseconds: 500));
+
+      if (otp.length != 6) {
+        throw Exception('One-Time PIN must be 6 digits.');
+      }
+      
+      final parsedOtp = int.tryParse(otp);
+      if (parsedOtp == null) {
+        throw Exception('One-Time PIN must contain digits only.');
+      }
+
+      if (otp == '000000') {
+        throw Exception('Incorrect One-Time PIN. Please try again.');
+      }
+
+      final outcome = DateTime.now().minute % 2 == 0 ? 'APPROVED' : 'PENDING';
+
+      return {
+        'month': 'May 2026',
+        'outcome': outcome,
+        'payDay': '2026-05-25',
+      };
+    } catch (e) {
+      throw Exception(e.toString().replaceAll('Exception: ', ''));
+    }
+  }
 }

@@ -1,4 +1,6 @@
+import 'dart:io';
 import 'dart:convert';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -93,4 +95,23 @@ class DocumentNotifier extends Notifier<List<VaultDocument>> {
     final String docsJson = jsonEncode(state.map((doc) => doc.toJson()).toList());
     await prefs.setString('vault_documents', docsJson);
   }
+
+  Future<int> calculateTotalSize() async {
+    int total = 0;
+    for (final doc in state) {
+      try {
+        final f = File(doc.path);
+        if (await f.exists()) {
+          total += await f.length();
+        }
+      } catch (_) {}
+    }
+    return total;
+  }
 }
+
+final vaultSizeProvider = FutureProvider<int>((ref) {
+  final docs = ref.watch(documentProvider);
+  return ref.read(documentProvider.notifier).calculateTotalSize();
+});
+

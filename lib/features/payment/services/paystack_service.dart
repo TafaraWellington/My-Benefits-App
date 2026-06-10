@@ -1,6 +1,5 @@
-import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_paystack_plus/flutter_paystack_plus.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 final paystackServiceProvider = Provider<PaystackService>((ref) {
@@ -8,34 +7,54 @@ final paystackServiceProvider = Provider<PaystackService>((ref) {
 });
 
 class PaystackService {
-  // Replace with your actual public key from Paystack Dashboard
-  static const String _publicKey = 'pk_live_f4d58086d2749877cfebee08d2552a049047d075';
+  final Dio _dio = Dio();
+  
+  // URL of the backend API (Next.js web_dashboard or hosted server)
+  // Dev local host (Android emulator uses 10.0.2.2, iOS simulator uses localhost)
+  static const String _backendUrl = 'http://10.0.2.2:3000'; // Update this to your production backend URL when deploying
 
-  Future<bool> checkout(BuildContext context, {required double amount, required String email}) async {
-    final completer = Completer<bool>();
+  Future<String?> initializeTransaction({
+    required double amount,
+    required String email,
+    required String reference,
+    required String userId,
+    required int credits,
+    String? tier,
+  }) async {
     try {
-      final reference = 'TRANS_${DateTime.now().millisecondsSinceEpoch}';
-      
-      await FlutterPaystackPlus.openPaystackPopup(
-        publicKey: _publicKey,
-        customerEmail: email,
-        context: context,
-        amount: (amount * 100).toInt().toString(),
-        reference: reference,
-        onClosed: () {
-          debugPrint('Payment modal closed');
-          if (!completer.isCompleted) completer.complete(false);
+      final response = await _dio.post(
+        '$_backendUrl/api/payment/initialize',
+        data: {
+          'email': email,
+          'amount': amount,
+          'reference': reference,
+          'userId': userId,
+          'credits': credits,
+          if (tier != null) 'tier': tier,
         },
-        onSuccess: () {
-          debugPrint('Payment successful: $reference');
-          if (!completer.isCompleted) completer.complete(true);
-        },
+        options: Options(
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        ),
       );
 
-      return completer.future;
+      if (response.statusCode == 200 && response.data['status'] == true) {
+        return response.data['data']['authorization_url'] as String;
+      }
+      return null;
     } catch (e) {
-      debugPrint('Paystack Error: $e');
-      return false;
+      debugPrint('Paystack Initialize Error: $e');
+      return null;
     }
   }
+
+  // Verification is now handled automatically via webhook on the server side.
+  // This client-side helper can check the user's updated profile directly from Supabase.
+  @Deprecated('Use profile sync/check instead, as webhooks process payments securely')
+  Future<bool> verifyTransaction(String reference) async {
+    // Left as a stub or can query client's backend status if needed
+    return false;
+  }
 }
+
